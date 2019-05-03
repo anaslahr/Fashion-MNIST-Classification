@@ -1,5 +1,8 @@
 import os
 
+from sklearn.cluster import KMeans
+from sklearn.metrics import normalized_mutual_info_score, adjusted_rand_score
+
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -46,15 +49,11 @@ def rescale_pixel_values(train_images, test_images):
     return train_images_r, test_images_r
 
 
-def launch_autoencoder(epochs, train_images, train_labels, test_images, test_labels):
+def launch_autoencoder(epochs, train_images, validation_data):
     # Autoencoder parameters
 
     batch_size = 256
 
-    inChannel = 1
-    x, y = 28, 28
-    input_img = Input(shape=(x, y, inChannel))
-    num_classes = 10
 
     input_img = Input(shape=(784,))
 
@@ -64,7 +63,7 @@ def launch_autoencoder(epochs, train_images, train_labels, test_images, test_lab
     encoded = Dense(units=64, activation='relu')(encoded)
     encoded = Dense(units=32, activation='relu')(encoded)
     decoded = Dense(units=64, activation='relu')(encoded)
-    decoded = Dense(units=128, activation='relu')(encoded)
+    decoded = Dense(units=128, activation='relu')(decoded)
     decoded = Dense(units=256, activation='relu')(decoded)
     decoded = Dense(units=512, activation='relu')(decoded)
     decoded = Dense(units=784, activation='sigmoid')(decoded)
@@ -81,22 +80,29 @@ def launch_autoencoder(epochs, train_images, train_labels, test_images, test_lab
                                          batch_size=batch_size,
                                          epochs=epochs,
                                          shuffle=True,
-                                         validation_data=(test_images, test_images))
+                                         validation_data=validation_data)
 
-    loss = autoencoder_train.history['loss']
-    val_loss = autoencoder_train.history['val_loss']
-    epochs = range(5)
-    plt.figure()
-    plt.plot(epochs, loss, 'bo', label='Training loss')
-    plt.plot(epochs, val_loss, 'b', label='Validation loss')
-    plt.title('Training and validation loss')
-    plt.legend()
-    plt.show()
+    if validation_data != None:
+        loss = autoencoder_train.history['loss']
+        val_loss = autoencoder_train.history['val_loss']
+        epochs_plot = range(epochs)
+        plt.figure()
+        plt.plot(epochs_plot, loss, 'bo', label='Training loss')
+        plt.plot(epochs_plot, val_loss, 'b', label='Validation loss')
+        plt.title('Training and validation loss')
+        plt.legend()
+        plt.show()
 
     encoded_imgs = encoder.predict(train_images)
-    predicted = auto_encoder.predict(test_images)
 
-    return encoded_imgs, predicted
+    return encoded_imgs, auto_encoder
+
+
+def predict_img(auto_encoder,test_images):
+    predicted = auto_encoder.predict(test_images)
+    return predicted
+
+
 
 
 def plot_results(encoded_imgs, predicted):
@@ -117,9 +123,25 @@ def plot_results(encoded_imgs, predicted):
         plt.imshow(predicted[i].reshape(28, 28))
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
-        plt.show()
-        plt.savefig('deep_autoencoding.png')
+    plt.show()
+    plt.savefig('deep_autoencoding.png')
 
+
+def k_means(encoded_imgs):
+    kmean = KMeans(n_clusters=10)
+    kmean.fit(encoded_imgs)
+    kmean2 = KMeans(n_clusters=10)
+    kmean2.fit(train_images.reshape(60000, 784))
+    y_kmean = kmean.predict(encoded_imgs)
+    print(kmean.labels_)
+    print("Normalized Mutal Info score between train_labels and kmeans labels of train_images: ",
+          normalized_mutual_info_score(train_labels, kmean2.labels_))
+    print("Normalized Mutal Info score between train_labels and kmeans labels of encoded images: ",
+          normalized_mutual_info_score(train_labels, kmean.labels_))
+    print("Adjusted Rand Index score between train_labels and kmeans labels of train_images: ",
+          adjusted_rand_score(train_labels, kmean2.labels_))
+    print("Adjusted Rand Index score between train_labels and kmeans labels of encoded images: ",
+          adjusted_rand_score(train_labels, kmean.labels_))
 
 if __name__ == '__main__':
     (train_images, train_labels), (test_images, test_labels) = fashion_mnist.load_data()
@@ -127,6 +149,8 @@ if __name__ == '__main__':
     test_images = test_images[0:1000]
     train_labels = train_labels[0:5000]
     test_labels = test_labels[0:1000]
+
+
 
     print("Training set (images) shape: {shape}".format(shape=train_images.shape))
     print("Test set (images) shape: {shape}".format(shape=test_images.shape))
@@ -145,10 +169,23 @@ if __name__ == '__main__':
     plot_original_imgs(train_images, test_images)
     train_images_r, test_images_r = rescale_pixel_values(train_images, test_images)
 
-    epochs = 5
-    encoded_img, predicted = launch_autoencoder(epochs, train_images_r, train_labels, test_images_r, test_labels)
-    plot_results(encoded_img, predicted);
-    print(encoded_img.shape)
-    call_tsne(50, encoded_img, train_labels)
+    # print(train_labels.shape)
+    # print(test_images.shape)
+    # print(test_labels.shape)
+    # print(train_images_r.shape)
 
+
+    epochs = 5
+    encoded_img_train, auto_encoder = launch_autoencoder(epochs, train_images_r, (test_images_r, test_images_r))
+    predicted = predict_img(auto_encoder, test_images_r)
+    plot_results(encoded_img_train, predicted)
+    print(encoded_img_train.shape)
+
+    k_means(encoded_img_train)
+    call_tsne(50, encoded_img_train, train_labels)
+
+    encoded_img_test = launch_autoencoder(epochs, test_images_r, None)[0]
+    print(encoded_img_test.shape)
+
+    call_svm("poly",encoded_img_train, train_labels, encoded_img_test, test_labels)
     #call_svm(0.1,"poly",encoded_img,y_train,test_images,test_labels)
