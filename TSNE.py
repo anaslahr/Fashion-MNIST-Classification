@@ -12,22 +12,15 @@ import time
 import seaborn as sns
 
 
-
-X_train, y_train = load_mnist('data/', kind='train')
-
-print(X_train.shape)
-
-print(y_train)
-
-sns.set_style('darkgrid')
-sns.set_palette('muted')
-sns.set_context("notebook", font_scale=1.5,
-                rc={"lines.linewidth": 2.5})
-RS = 123
+def set_style():
+    sns.set_style('darkgrid')
+    sns.set_palette('muted')
+    sns.set_context("notebook", font_scale=1.5,
+                    rc={"lines.linewidth": 2.5})
 
 # Utility function to visualize the outputs of PCA and t-SNE
-
 def fashion_scatter(x, colors):
+    set_style()
     # choose a color palette with seaborn.
     num_classes = len(np.unique(colors))
     palette = np.array(sns.color_palette("hls", num_classes))
@@ -61,47 +54,52 @@ def fashion_scatter(x, colors):
 
 
 # Subset first 20k data points to visualize
-x_subset = X_train[0:20000]
-y_subset = y_train[0:20000]
-
-print(np.unique(y_subset))
 
 
-time_start = time.time()
 
-# pca = PCA(n_components=50)
-# pca_result = pca.fit_transform(X_train)
-#
-# print('PCA done! Time elapsed: {} seconds'.format(time.time()-time_start))
+def call_pca(numb_component, x_data,y_data):
+    print("PCA is running...")
+    time_start = time.time()
 
-pca_50 = PCA(n_components=50)
-pca_result_50 = pca_50.fit_transform(X_train)
+    # PCA then TSNE on Encoded Images
+    pca = PCA(numb_component)
+    pca_result = pca.fit_transform(x_data)
+    print('PCA done! Time elapsed: {} seconds'.format(time.time()-time_start))
+    print('Cumulative variance explained by 50 principal components: {}'.format(np.sum(pca.explained_variance_ratio_)))
 
-print('PCA with 50 components done! Time elapsed: {} seconds'.format(time.time()-time_start))
+    pca_df = pandas.DataFrame(columns=['pca1', 'pca2', 'pca3', 'pca4'])
+    pca_df['pca1'] = pca_result[:, 0]
+    pca_df['pca2'] = pca_result[:, 1]
+    pca_df['pca3'] = pca_result[:, 2]
+    pca_df['pca4'] = pca_result[:, 3]
 
-print('Cumulative variance explained by 50 principal components: {}'.format(np.sum(pca_50.explained_variance_ratio_)))
-
-
-pca_df = pandas.DataFrame(columns = ['pca1','pca2','pca3','pca4'])
-
-pca_df['pca1'] = pca_result_50[:,0]
-pca_df['pca2'] = pca_result_50[:,1]
-pca_df['pca3'] = pca_result_50[:,2]
-pca_df['pca4'] = pca_result_50[:,3]
-
-top_two_comp = pca_df[['pca1','pca2']] # taking first and second principal component
-fashion_scatter(top_two_comp.values,y_train)
-
-print('Variance explained per principal component: {}'.format(pca_50.explained_variance_ratio_))
-
-time_start = time.time()
+    top_two_comp = pca_df[['pca1', 'pca2']]  # taking first and second principal component
+    fashion_scatter(top_two_comp.values, y_data)
+    return pca_result
 
 
-#Try different hyper parameters and conclude
-#Perplexity help to have better cluster
-fashion_tsne = TSNE(random_state=RS, perplexity=35, learning_rate=200).fit_transform(pca_result_50)
 
-print('t-SNE done! Time elapsed: {} seconds'.format(time.time()-time_start))
 
-fashion_scatter(fashion_tsne, y_train)
+def call_tsne(perplexity, x_data,y_data):
+    print("t-SNE is running...")
+    time_start = time.time()
+    RS = 123
+    #Try different hyper parameters and conclude
+    #Perplexity help to have better cluster
+    fashion_tsne = TSNE(random_state=RS, perplexity=perplexity).fit_transform(x_data)
+    print('t-SNE '+str(perplexity)+' done! Time elapsed: {} seconds'.format(time.time()-time_start))
+    fashion_scatter(fashion_tsne, y_data)
+    return fashion_tsne
 
+
+
+if __name__ == '__main__':
+
+    x_train, y_train = load_mnist('data/', kind='train')
+    print(x_train.shape)
+    print(y_train)
+    x_subset = x_train[0:10000]
+    y_subset = y_train[0:10000]
+    print(np.unique(y_subset))
+    pca_result = call_pca(50, x_subset, y_subset)
+    call_tsne(50,pca_result,y_subset)
